@@ -20,7 +20,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://bloodapp:bloodapp@db:5432/bloodapp
       SECRET_KEY: ${SECRET_KEY:-change-this-development-key-before-deploying}
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
       FRONTEND_URL: http://localhost:5173
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -29,7 +29,6 @@ services:
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
       PASSWORD_RESET_EXPIRE_MINUTES: ${PASSWORD_RESET_EXPIRE_MINUTES:-30}
-      SEED_DEMO_DONORS: ${SEED_DEMO_DONORS:-true}
     ports:
       - "8000:8000"
     depends_on:
