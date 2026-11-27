@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -8,6 +8,8 @@ import {
   HeartHandshake,
   LockKeyhole,
   MapPin,
+  Search,
+  Send,
   ShieldCheck,
   Sparkles,
   UsersRound,
@@ -22,14 +24,18 @@ const initialForm = {
   password: "",
   role: "donor",
   blood_group: "",
+  date_of_birth: "",
   phone: "",
   city: "",
 };
 
 function App() {
-  const [mode, setMode] = useState("register");
+  const [mode, setMode] = useState(() =>
+    window.location.hash.includes("reset_token=") ? "reset" : "register",
+  );
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [account, setAccount] = useState(() => {
     try {
@@ -40,6 +46,10 @@ function App() {
   });
 
   const isRegister = mode === "register";
+  const isForgotPassword = mode === "forgot";
+  const isResetPassword = mode === "reset";
+  const isLogin = mode === "login";
+  const resetToken = new URLSearchParams(window.location.hash.slice(1)).get("reset_token");
 
   function updateField(event) {
     const { name, value } = event.target;
@@ -49,17 +59,32 @@ function App() {
   async function submitForm(event) {
     event.preventDefault();
     setError("");
+    setMessage("");
     setLoading(true);
     try {
-      const body = isRegister
+      const endpoint = isForgotPassword
+        ? "password-reset/request"
+        : isResetPassword
+          ? "password-reset/confirm"
+          : isRegister
+            ? "register"
+            : "login";
+      const body = isForgotPassword
         ? {
-            ...form,
-            blood_group: form.blood_group || null,
-            phone: form.phone || null,
-            city: form.city || null,
+            email: form.email,
+            date_of_birth: form.date_of_birth,
+            phone: form.phone,
           }
-        : { email: form.email, password: form.password };
-      const response = await fetch(`${API_URL}/api/auth/${isRegister ? "register" : "login"}`, {
+        : isResetPassword
+          ? { token: resetToken, new_password: form.password }
+          : isRegister
+            ? {
+                ...form,
+                blood_group: form.blood_group || null,
+                city: form.city || null,
+              }
+            : { email: form.email, password: form.password };
+      const response = await fetch(`${API_URL}/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -71,6 +96,17 @@ function App() {
             ? result.detail
             : "Please check your details and try again.",
         );
+      }
+      if (isForgotPassword) {
+        setMessage(result.message);
+        return;
+      }
+      if (isResetPassword) {
+        window.history.replaceState({}, "", window.location.pathname);
+        setForm({ ...initialForm, email: form.email, password: "" });
+        setMode("login");
+        setMessage(result.message);
+        return;
       }
       const session = { token: result.access_token, user: result.user };
       localStorage.setItem("openvein-account", JSON.stringify(session));
@@ -106,16 +142,19 @@ function App() {
         </a>
         <div className="flex items-center gap-2 text-sm text-stone-600">
           <span className="hidden sm:inline">
-            {isRegister ? "Already part of the community?" : "New to OpenVein?"}
+            {isRegister || isForgotPassword || isResetPassword
+              ? "Already part of the community?"
+              : "New to OpenVein?"}
           </span>
           <button
             className="font-semibold text-coral transition hover:text-rose-700"
             onClick={() => {
-              setMode(isRegister ? "login" : "register");
+              setMode(isRegister || isForgotPassword || isResetPassword ? "login" : "register");
               setError("");
+              setMessage("");
             }}
           >
-            {isRegister ? "Sign in" : "Create an account"}
+            {isRegister || isForgotPassword || isResetPassword ? "Sign in" : "Create an account"}
           </button>
         </div>
       </header>
@@ -173,15 +212,31 @@ function App() {
               <div className="relative rounded-[1.65rem] border border-white/80 bg-white p-6 shadow-card sm:p-9">
                 <div className="mb-7">
                   <p className="text-sm font-semibold text-coral">
-                    {isRegister ? "MAKE A DIFFERENCE" : "WELCOME BACK"}
+                    {isRegister
+                      ? "MAKE A DIFFERENCE"
+                      : isForgotPassword
+                        ? "ACCOUNT RECOVERY"
+                        : isResetPassword
+                          ? "CHOOSE A NEW PASSWORD"
+                          : "WELCOME BACK"}
                   </p>
                   <h2 className="mt-2 font-display text-2xl font-extrabold tracking-tight sm:text-[1.75rem]">
-                    {isRegister ? "Join the community" : "Good to see you again"}
+                    {isRegister
+                      ? "Join the community"
+                      : isForgotPassword
+                        ? "Reset your password"
+                        : isResetPassword
+                          ? "Set a new password"
+                          : "Good to see you again"}
                   </h2>
                   <p className="mt-2 text-sm text-stone-500">
                     {isRegister
                       ? "Create your free account in just a moment."
-                      : "Sign in to pick up where you left off."}
+                      : isForgotPassword
+                        ? "Enter your account details. We’ll email a one-time reset link if they match."
+                        : isResetPassword
+                          ? "Choose a strong password you haven’t used before."
+                          : "Sign in to pick up where you left off."}
                   </p>
                 </div>
 
@@ -198,6 +253,18 @@ function App() {
                           autoComplete="name"
                           minLength={2}
                           maxLength={120}
+                          required
+                          className="input"
+                        />
+                      </Field>
+                      <Field label="Date of birth" htmlFor="date_of_birth">
+                        <input
+                          id="date_of_birth"
+                          name="date_of_birth"
+                          value={form.date_of_birth}
+                          onChange={updateField}
+                          autoComplete="bday"
+                          type="date"
                           required
                           className="input"
                         />
@@ -245,8 +312,22 @@ function App() {
                           </div>
                         </Field>
                       )}
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label="City" htmlFor="city">
+                      <Field label="Phone number" htmlFor="phone">
+                        <input
+                          id="phone"
+                          name="phone"
+                          value={form.phone}
+                          onChange={updateField}
+                          placeholder="Your number"
+                          autoComplete="tel"
+                          type="tel"
+                          minLength={7}
+                          maxLength={30}
+                          required
+                          className="input"
+                        />
+                      </Field>
+                      <Field label="City (optional)" htmlFor="city">
                           <input
                             id="city"
                             name="city"
@@ -257,52 +338,73 @@ function App() {
                             maxLength={100}
                             className="input"
                           />
-                        </Field>
-                        <Field label="Phone (optional)" htmlFor="phone">
-                          <input
-                            id="phone"
-                            name="phone"
-                            value={form.phone}
-                            onChange={updateField}
-                            placeholder="Your number"
-                            autoComplete="tel"
-                            type="tel"
-                            maxLength={30}
-                            className="input"
-                          />
-                        </Field>
-                      </div>
+                      </Field>
                     </>
                   )}
 
-                  <Field label="Email address" htmlFor="email">
-                    <input
-                      id="email"
-                      name="email"
-                      value={form.email}
-                      onChange={updateField}
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      type="email"
-                      required
-                      className="input"
-                    />
-                  </Field>
-                  <Field label="Password" htmlFor="password">
-                    <input
-                      id="password"
-                      name="password"
-                      value={form.password}
-                      onChange={updateField}
-                      placeholder={isRegister ? "At least 8 characters" : "Your password"}
-                      autoComplete={isRegister ? "new-password" : "current-password"}
-                      type="password"
-                      minLength={isRegister ? 8 : 1}
-                      maxLength={128}
-                      required
-                      className="input"
-                    />
-                  </Field>
+                  {(isLogin || isRegister || isForgotPassword) && (
+                    <Field label="Email address" htmlFor="email">
+                      <input
+                        id="email"
+                        name="email"
+                        value={form.email}
+                        onChange={updateField}
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        type="email"
+                        required
+                        className="input"
+                      />
+                    </Field>
+                  )}
+                  {isForgotPassword && (
+                    <>
+                      <Field label="Date of birth" htmlFor="date_of_birth">
+                        <input
+                          id="date_of_birth"
+                          name="date_of_birth"
+                          value={form.date_of_birth}
+                          onChange={updateField}
+                          autoComplete="bday"
+                          type="date"
+                          required
+                          className="input"
+                        />
+                      </Field>
+                      <Field label="Phone number" htmlFor="phone">
+                        <input
+                          id="phone"
+                          name="phone"
+                          value={form.phone}
+                          onChange={updateField}
+                          placeholder="The phone number on your account"
+                          autoComplete="tel"
+                          type="tel"
+                          minLength={7}
+                          maxLength={30}
+                          required
+                          className="input"
+                        />
+                      </Field>
+                    </>
+                  )}
+                  {(isLogin || isRegister || isResetPassword) && (
+                    <Field label={isResetPassword ? "New password" : "Password"} htmlFor="password">
+                      <input
+                        id="password"
+                        name="password"
+                        value={form.password}
+                        onChange={updateField}
+                        placeholder={isLogin ? "Your password" : "At least 8 characters"}
+                        autoComplete={isLogin ? "current-password" : "new-password"}
+                        type="password"
+                        minLength={isLogin ? 1 : 8}
+                        maxLength={128}
+                        required
+                        className="input"
+                      />
+                    </Field>
+                  )}
 
                   {error && (
                     <p
@@ -310,6 +412,14 @@ function App() {
                       className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"
                     >
                       {error}
+                    </p>
+                  )}
+                  {message && (
+                    <p
+                      role="status"
+                      className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+                    >
+                      {message}
                     </p>
                   )}
                   <button
@@ -321,7 +431,11 @@ function App() {
                       ? "One moment..."
                       : isRegister
                         ? "Create my account"
-                        : "Sign in"}
+                        : isForgotPassword
+                          ? "Send reset link"
+                          : isResetPassword
+                            ? "Update password"
+                            : "Sign in"}
                     {!loading && (
                       <ArrowRight
                         size={17}
@@ -331,9 +445,43 @@ function App() {
                   </button>
                 </form>
 
+                {isLogin && (
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      className="text-sm font-semibold text-coral transition hover:text-rose-700"
+                      onClick={() => {
+                        setMode("forgot");
+                        setError("");
+                        setMessage("");
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
+
+                {(isForgotPassword || isResetPassword) && (
+                  <div className="mt-4 text-center">
+                    <button
+                      type="button"
+                      className="text-sm font-semibold text-stone-500 transition hover:text-ink"
+                      onClick={() => {
+                        setMode("login");
+                        setError("");
+                        setMessage("");
+                      }}
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                )}
+
                 <div className="mt-5 flex items-center justify-center gap-2 text-xs text-stone-400">
                   <LockKeyhole size={13} />
-                  Your information is private and secure.
+                  {isForgotPassword
+                    ? "DOB and phone are extra checks; your email link authorizes the reset."
+                    : "Your information is private and secure."}
                 </div>
               </div>
             </div>
@@ -370,12 +518,56 @@ function Field({ label, htmlFor, children }) {
 }
 
 function Welcome({ account, onSignOut }) {
+  const [showRecoveryForm, setShowRecoveryForm] = useState(false);
+  const [recoveryDetails, setRecoveryDetails] = useState({
+    date_of_birth: "",
+    phone: "",
+  });
+  const [recoveryError, setRecoveryError] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [savingRecoveryDetails, setSavingRecoveryDetails] = useState(false);
   const user = account.user;
   const roleLabels = {
     donor: "Donor",
     recipient: "Recipient",
     both: "Donor & recipient",
   };
+
+  async function saveRecoveryDetails(event) {
+    event.preventDefault();
+    setRecoveryError("");
+    setRecoveryMessage("");
+    setSavingRecoveryDetails(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/recovery-details`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${account.token}`,
+        },
+        body: JSON.stringify(recoveryDetails),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof result.detail === "string"
+            ? result.detail
+            : "Please check your details and try again.",
+        );
+      }
+      setRecoveryMessage("Your recovery details have been updated.");
+      setShowRecoveryForm(false);
+    } catch (requestError) {
+      setRecoveryError(
+        requestError instanceof TypeError
+          ? "We couldn't reach the server. Please try again."
+          : requestError.message,
+      );
+    } finally {
+      setSavingRecoveryDetails(false);
+    }
+  }
+
   return (
     <section className="relative mx-auto max-w-3xl px-6 py-20 sm:py-28">
       <div className="rounded-[2rem] border border-white bg-white p-8 text-center shadow-card sm:p-12">
@@ -402,6 +594,90 @@ function Welcome({ account, onSignOut }) {
           Your contact details are not shown publicly. Please use a qualified healthcare provider
           for medical guidance.
         </p>
+        <div className="mx-auto mt-6 max-w-md">
+          {recoveryMessage && (
+            <p role="status" className="mb-3 text-sm text-emerald-700">
+              {recoveryMessage}
+            </p>
+          )}
+          {showRecoveryForm ? (
+            <form onSubmit={saveRecoveryDetails} className="space-y-4 rounded-2xl bg-cream p-5 text-left">
+              <p className="text-sm leading-5 text-stone-600">
+                These details help verify a reset request. A one-time link will still be sent to
+                your email.
+              </p>
+              <Field label="Date of birth" htmlFor="recovery_date_of_birth">
+                <input
+                  id="recovery_date_of_birth"
+                  name="date_of_birth"
+                  type="date"
+                  value={recoveryDetails.date_of_birth}
+                  onChange={(event) =>
+                    setRecoveryDetails((current) => ({
+                      ...current,
+                      date_of_birth: event.target.value,
+                    }))
+                  }
+                  required
+                  className="input"
+                />
+              </Field>
+              <Field label="Phone number" htmlFor="recovery_phone">
+                <input
+                  id="recovery_phone"
+                  name="phone"
+                  type="tel"
+                  value={recoveryDetails.phone}
+                  onChange={(event) =>
+                    setRecoveryDetails((current) => ({
+                      ...current,
+                      phone: event.target.value,
+                    }))
+                  }
+                  minLength={7}
+                  maxLength={30}
+                  required
+                  className="input"
+                />
+              </Field>
+              {recoveryError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {recoveryError}
+                </p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="submit"
+                  disabled={savingRecoveryDetails}
+                  className="rounded-xl bg-coral px-4 py-2.5 text-sm font-bold text-white disabled:opacity-70"
+                >
+                  {savingRecoveryDetails ? "Saving..." : "Save details"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRecoveryForm(false);
+                    setRecoveryError("");
+                  }}
+                  className="rounded-xl border border-stone-200 px-4 py-2.5 text-sm font-semibold text-stone-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setRecoveryMessage("");
+                setShowRecoveryForm(true);
+              }}
+              className="text-sm font-semibold text-coral transition hover:text-rose-700"
+            >
+              Add or update password recovery details
+            </button>
+          )}
+        </div>
         <button
           onClick={onSignOut}
           className="mt-7 text-sm font-semibold text-stone-500 underline decoration-stone-300 underline-offset-4 transition hover:text-ink"
@@ -409,7 +685,158 @@ function Welcome({ account, onSignOut }) {
           Sign out
         </button>
       </div>
+      {(user.role === "recipient" || user.role === "both") && (
+        <BloodRequestDashboard account={account} />
+      )}
+      {(user.role === "donor" || user.role === "both") && (
+        <DonorRequestInbox account={account} />
+      )}
     </section>
+  );
+}
+
+function BloodRequestDashboard({ account }) {
+  const [bloodGroup, setBloodGroup] = useState("");
+  const [city, setCity] = useState(account.user.city ?? "");
+  const [hospital, setHospital] = useState("");
+  const [units, setUnits] = useState("1");
+  const [message, setMessage] = useState("");
+  const [donors, setDonors] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  async function api(path, options = {}) {
+    const response = await fetch(`${API_URL}/api/auth${path}`, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${account.token}`,
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...options.headers,
+      },
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "Please try again.");
+    return result;
+  }
+
+  async function searchDonors(event) {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    setDonors([]);
+    setHasSearched(true);
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({ blood_group: bloodGroup });
+      if (city.trim()) params.set("city", city.trim());
+      setDonors(await api(`/donors?${params}`));
+    } catch (err) {
+      setError(err instanceof TypeError ? "We couldn't reach the server. Please try again." : err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendRequest(donor) {
+    setError("");
+    setNotice("");
+    setBusy(true);
+    try {
+      await api(`/blood-requests/${donor.id}`, {
+        method: "POST",
+        body: JSON.stringify({ blood_group: bloodGroup, city: city.trim(), hospital: hospital.trim() || null, units: Number(units), message: message.trim() || null }),
+      });
+      setNotice(`Your request was sent to ${donor.full_name}.`);
+      setRequests(await api("/blood-requests"));
+    } catch (err) {
+      setError(err instanceof TypeError ? "We couldn't reach the server. Please try again." : err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-8 rounded-[2rem] border border-white bg-white p-6 shadow-card sm:p-9">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-coral"><Heart size={22} /></span>
+        <p className="mt-4 text-xs font-bold tracking-[0.16em] text-coral">FIND A DONOR</p>
+        <h2 className="mt-1 font-display text-2xl font-extrabold tracking-tight">Request blood from a compatible donor</h2>
+        <p className="mt-2 text-sm leading-6 text-stone-500">Choose the patient’s blood group and city. We’ll show donors whose blood type may be compatible.</p>
+      </div>
+
+      <form onSubmit={searchDonors} className="mx-auto mt-7 grid max-w-3xl gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+        <Field label="Blood group needed" htmlFor="request_blood_group">
+          <select id="request_blood_group" value={bloodGroup} onChange={(e) => setBloodGroup(e.target.value)} required className="input">
+            <option value="">Choose blood group</option>
+            {bloodGroups.map((group) => <option key={group} value={group}>{group}</option>)}
+          </select>
+        </Field>
+        <Field label="City" htmlFor="request_city">
+          <input id="request_city" value={city} onChange={(e) => setCity(e.target.value)} placeholder="City to search" minLength={2} maxLength={100} required className="input" />
+        </Field>
+        <button disabled={busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-coral px-5 py-3 text-sm font-bold text-white transition hover:bg-rose-600 disabled:opacity-60"><Search size={16} /> Find donors</button>
+      </form>
+
+      {donors.length > 0 && (
+        <div className="mx-auto mt-8 max-w-3xl">
+          <div className="mb-4 grid gap-3 sm:grid-cols-2">
+            <Field label="Hospital or care center (optional)" htmlFor="request_hospital"><input id="request_hospital" value={hospital} onChange={(e) => setHospital(e.target.value)} maxLength={160} placeholder="Where blood is needed" className="input" /></Field>
+            <Field label="Units needed" htmlFor="request_units"><input id="request_units" type="number" min="1" max="10" value={units} onChange={(e) => setUnits(e.target.value)} required className="input" /></Field>
+          </div>
+          <Field label="Message to donor (optional)" htmlFor="request_message"><textarea id="request_message" value={message} onChange={(e) => setMessage(e.target.value)} maxLength={500} rows={2} placeholder="Share any helpful details" className="input resize-y" /></Field>
+          <h3 className="mb-3 mt-6 text-sm font-bold text-ink">Compatible donors in {city}</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {donors.map((donor) => <div key={donor.id} className="flex items-center gap-3 rounded-2xl border border-stone-100 bg-cream/70 p-4">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-rose-100 font-display font-extrabold text-coral">{donor.blood_group}</span>
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{donor.full_name}</p><p className="mt-1 flex items-center gap-1 text-xs text-stone-500"><MapPin size={12} />{donor.city || "City not listed"}</p></div>
+              <button type="button" disabled={busy} onClick={() => sendRequest(donor)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-coral px-3 py-2 text-xs font-bold text-white hover:bg-rose-600 disabled:opacity-60"><Send size={13} /> Ask donor</button>
+            </div>)}
+          </div>
+        </div>
+      )}
+      {hasSearched && donors.length === 0 && !busy && !error && <p className="mt-6 text-center text-sm text-stone-500">No compatible donors found in {city}. Check that the city is spelled Roorkee, then restart the backend so demo donors are seeded.</p>}
+      {error && <p role="alert" className="mt-5 text-center text-sm text-red-700">{error}</p>}
+      {notice && <p role="status" className="mt-5 text-center text-sm font-semibold text-emerald-700">{notice}</p>}
+      {requests.length > 0 && <div className="mx-auto mt-7 max-w-3xl border-t border-stone-100 pt-5"><h3 className="text-sm font-bold">Your requests</h3><div className="mt-3 space-y-2">{requests.map((request) => <p key={request.id} className="flex justify-between gap-4 rounded-xl bg-cream px-4 py-3 text-sm"><span>{request.blood_group} request · {request.city}</span><span className="font-semibold capitalize text-amber-700">{request.status}</span></p>)}</div></div>}
+      <p className="mt-6 text-center text-xs leading-5 text-stone-500">Compatibility shown here is a basic guide. A medical professional and blood bank must confirm donor suitability and cross-match before transfusion.</p>
+    </div>
+  );
+}
+
+function DonorRequestInbox({ account }) {
+  const [requests, setRequests] = useState([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/auth/blood-requests/inbox`, {
+      headers: { Authorization: `Bearer ${account.token}` },
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(typeof result.detail === "string" ? result.detail : "Could not load requests.");
+        setRequests(result);
+      })
+      .catch((err) => setError(err instanceof TypeError ? "We couldn't reach the server." : err.message));
+  }, [account.token]);
+
+  return (
+    <div className="mt-8 rounded-[2rem] border border-white bg-white p-6 shadow-card sm:p-9">
+      <h2 className="font-display text-2xl font-extrabold">Requests sent to you</h2>
+      <p className="mt-2 text-sm text-stone-500">People who need a compatible blood type can send you a private request here.</p>
+      {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
+      {!error && requests.length === 0 && <p className="mt-5 rounded-xl bg-cream p-4 text-sm text-stone-500">No blood requests yet.</p>}
+      <div className="mt-5 space-y-3">{requests.map((request) => (
+        <article key={request.id} className="rounded-2xl border border-stone-100 bg-cream/70 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-bold">{request.recipient_name} needs {request.blood_group}</h3><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold capitalize text-amber-800">{request.status}</span></div>
+          <p className="mt-2 text-sm text-stone-600">{request.units} unit{request.units === 1 ? "" : "s"} · {request.city}{request.hospital ? ` · ${request.hospital}` : ""}</p>
+          {request.message && <p className="mt-2 text-sm leading-6 text-stone-600">{request.message}</p>}
+          <p className="mt-2 text-xs text-stone-400">Please coordinate through appropriate medical staff; this app does not confirm donor suitability.</p>
+        </article>
+      ))}</div>
+    </div>
   );
 }
 
