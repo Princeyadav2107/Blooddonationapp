@@ -112,6 +112,8 @@ class UserRead(BaseModel):
     city: str | None
     gender: Gender | None = None
     last_donation_date: date | None = None
+    last_verified_donation_date: date | None = None
+    last_verified_donation_at: str | None = None
     latitude: float | None = None
     longitude: float | None = None
     created_at: datetime
@@ -286,6 +288,8 @@ class NeedInvitationRead(BaseModel):
     matching_mode: str = "compatible"
     medical_screening_status: str | None = None
     medical_background_concern: bool | None = None
+    confirmation_pin: str | None = None
+    confirmation_pin_attempts: int = 0
 
 
 class BloodNeedRead(BaseModel):
@@ -326,3 +330,7 @@ class DonorInvitationRead(BaseModel):
 class DonorInvitationResponse(BaseModel):
     response: Literal["available", "not_available", "not_eligible"]
     eligibility_confirmed: bool = False
+
+
+class DonationCompletionConfirm(BaseModel):
+    confirmation_pin: str = Field(pattern=r"^\d{4}$")

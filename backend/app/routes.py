@@ -14,7 +14,7 @@ from urllib.request import Request as UrlRequest, urlopen
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -39,6 +39,7 @@ from app.schemas import (
     BloodRequestRead,
     DonorInvitationRead,
     DonorInvitationResponse,
+    DonationCompletionConfirm,
     DonorMedicalFeedbackUpdate,
     DonorProfileUpdate,
     GeocodedPlaceRead,
@@ -192,7 +193,7 @@ def geocode_location(
     external_request = UrlRequest(
         f"https://nominatim.openstreetmap.org/search?{params}",
         headers={
-            "User-Agent": "OpenVein/1.0 (https://github.com/Princeyadav2107/Blooddonationapp)",
+            "User-Agent": "Blood365/1.0 (https://github.com/Princeyadav2107/Blooddonationapp)",
             "Accept": "application/json",
             "Accept-Language": "en",
         },
@@ -250,7 +251,7 @@ def geocode_indian_pincode(
     results: list[dict[str, str | float | None]] = []
     postal_request = UrlRequest(
         f"https://api.pincodeapi.in/api/v1/pincode/{code}",
-        headers={"User-Agent": "OpenVein/1.0", "Accept": "application/json"},
+        headers={"User-Agent": "Blood365/1.0", "Accept": "application/json"},
     )
     try:
         with urlopen(postal_request, timeout=8) as response:
@@ -299,7 +300,7 @@ def geocode_indian_pincode(
         map_request = UrlRequest(
             f"https://nominatim.openstreetmap.org/search?{params}",
             headers={
-                "User-Agent": "OpenVein/1.0 (https://github.com/Princeyadav2107/Blooddonationapp)",
+                "User-Agent": "Blood365/1.0 (https://github.com/Princeyadav2107/Blooddonationapp)",
                 "Accept": "application/json",
                 "Accept-Language": "en",
             },
@@ -369,6 +370,24 @@ def radius_for_distance(distance_km: float) -> int:
     if distance_km <= 10:
         return 10
     return 15
+
+
+def generate_confirmation_pin(db: Session, blood_need_id: int) -> str:
+    """Create a four-digit code unique to this request and all current assignments."""
+    used_pins = set(db.scalars(
+        select(DonationInvitation.confirmation_pin).where(
+            DonationInvitation.confirmation_pin.is_not(None),
+            or_(
+                DonationInvitation.blood_need_id == blood_need_id,
+                DonationInvitation.status.in_(("pending", "available", "accepted")),
+            ),
+        )
+    ).all())
+    for _ in range(9000):
+        pin = f"{secrets.randbelow(9000) + 1000:04d}"
+        if pin not in used_pins:
+            return pin
+    raise HTTPException(status_code=503, detail="Could not generate a unique donation confirmation code. Try again.")
 
 
 def fallback_candidates(db: Session, need: BloodNeed, mode: str) -> list[tuple[User, float, int, bool]]:
@@ -463,6 +482,7 @@ def resume_unmatched_needs(db: Session) -> None:
                     radius_km=radius,
                     eligibility_confirmation_required=needs_confirmation,
                     priority=priority_start + offset,
+                    confirmation_pin=generate_confirmation_pin(db, need.id) if offset == 0 else None,
                 )
             )
         need.status = "open"
@@ -517,6 +537,8 @@ def advance_expired_invitations(db: Session) -> None:
             need.status = "unmatched"
         else:
             next_invitation.status = "pending"
+            next_invitation.confirmation_pin = generate_confirmation_pin(db, need.id)
+            next_invitation.confirmation_pin_attempts = 0
             next_invitation.created_at = now
             donor = db.get(User, next_invitation.donor_id)
             if donor is not None:
@@ -642,6 +664,7 @@ def create_blood_need(
                     radius_km=radius,
                     eligibility_confirmation_required=needs_confirmation,
                     priority=priority,
+                    confirmation_pin=generate_confirmation_pin(db, need.id) if priority == 0 else None,
                 )
             )
     db.commit()
@@ -685,6 +708,7 @@ def choose_blood_need_fallback(
             distance_km=distance, radius_km=radius,
             eligibility_confirmation_required=needs_confirmation, priority=priority,
             matching_mode=payload.choice,
+            confirmation_pin=generate_confirmation_pin(db, need.id) if priority == 0 else None,
         ))
     need.status = "open"
     db.commit()
@@ -788,6 +812,8 @@ def list_my_blood_needs(
                         matching_mode=invitation.matching_mode,
                         medical_screening_status=invitation.medical_screening_status if invitation.medical_feedback_shared else None,
                         medical_background_concern=invitation.medical_background_concern if invitation.medical_feedback_shared else None,
+                        confirmation_pin=invitation.confirmation_pin if invitation.status in {"pending", "available"} else None,
+                        confirmation_pin_attempts=invitation.confirmation_pin_attempts,
                     )
                     for invitation, donor in rows
                 ],
@@ -913,6 +939,8 @@ def respond_to_donor_invitation(
     next_donor = None
     if next_invitation is not None:
         next_invitation.status = "pending"
+        next_invitation.confirmation_pin = generate_confirmation_pin(db, need.id)
+        next_invitation.confirmation_pin_attempts = 0
         next_invitation.created_at = datetime.now(timezone.utc)
         next_donor = db.get(User, next_invitation.donor_id)
     else:
@@ -941,6 +969,7 @@ def respond_to_donor_invitation(
 @router.post("/donor-invitations/{invitation_id}/complete", response_model=UserRead)
 def complete_donation_invitation(
     invitation_id: int,
+    payload: DonationCompletionConfirm,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> User:
@@ -949,15 +978,46 @@ def complete_donation_invitation(
         raise HTTPException(status_code=404, detail="Donation request not found.")
     if invitation.status != "available":
         raise HTTPException(status_code=409, detail="Only an accepted donation request can be marked complete.")
+    pin_is_correct = invitation.confirmation_pin is not None and secrets.compare_digest(
+        payload.confirmation_pin, invitation.confirmation_pin
+    )
+    if not pin_is_correct:
+        if invitation.confirmation_pin_attempts >= 10:
+            raise HTTPException(status_code=429, detail="Too many incorrect codes. Ask the acceptor to generate a new donation confirmation code.")
+        invitation.confirmation_pin_attempts += 1
+        db.commit()
+        raise HTTPException(status_code=422, detail="That donation confirmation code is incorrect. Check with the acceptor and try again.")
 
     invitation.status = "completed"
-    user.last_donation_date = date.today()
+    completed_at = datetime.now(timezone.utc)
+    user.last_donation_date = completed_at.date()
+    user.last_verified_donation_date = completed_at.date()
+    user.last_verified_donation_at = completed_at.isoformat()
     need = db.get(BloodNeed, invitation.blood_need_id)
     if need is not None:
         need.status = "completed"
     db.commit()
     db.refresh(user)
     return user
+
+
+@router.post("/blood-needs/{reference_code}/invitations/{invitation_id}/confirmation-pin")
+def regenerate_donation_confirmation_pin(
+    reference_code: str,
+    invitation_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    need = db.scalar(select(BloodNeed).where(BloodNeed.reference_code == reference_code, BloodNeed.recipient_id == user.id))
+    invitation = db.get(DonationInvitation, invitation_id)
+    if need is None or invitation is None or invitation.blood_need_id != need.id:
+        raise HTTPException(status_code=404, detail="Donation request not found.")
+    if invitation.status not in {"pending", "available"}:
+        raise HTTPException(status_code=409, detail="A code can only be generated for the currently assigned donor.")
+    invitation.confirmation_pin = generate_confirmation_pin(db, need.id)
+    invitation.confirmation_pin_attempts = 0
+    db.commit()
+    return {"message": "A new donation confirmation code was generated.", "confirmation_pin": invitation.confirmation_pin}
 
 
 @router.get("/donors", response_model=list[BloodDonorRead])

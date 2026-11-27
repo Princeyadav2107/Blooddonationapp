@@ -22,6 +22,8 @@ class User(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_donation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_verified_donation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_verified_donation_at: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -75,6 +77,8 @@ class DonationInvitation(Base):
     medical_screening_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     medical_background_concern: Mapped[bool | None] = mapped_column(nullable=True)
     medical_feedback_shared: Mapped[bool] = mapped_column(default=False)
+    confirmation_pin: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    confirmation_pin_attempts: Mapped[int] = mapped_column(default=0)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

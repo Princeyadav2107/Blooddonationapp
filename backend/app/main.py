@@ -8,11 +8,11 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app import models  # noqa: F401
 from app.models import BloodNeed, BloodRequest, DonationInvitation, PasswordResetToken, User
-from app.routes import router
+from app.routes import generate_confirmation_pin, router
 
 
 def remove_legacy_demo_donors() -> None:
-    """Remove sample donor accounts created by earlier versions of OpenVein."""
+    """Remove sample donor accounts created by earlier versions of Blood365."""
     demo_user_ids = select(User.id).where(
         or_(
             User.full_name.like("Demo Donor %"),
@@ -52,6 +52,8 @@ async def lifespan(_: FastAPI):
         "latitude": "FLOAT",
         "longitude": "FLOAT",
         "last_donation_date": "DATE",
+        "last_verified_donation_date": "DATE",
+        "last_verified_donation_at": "VARCHAR(40)",
     }
     with engine.begin() as connection:
         for column_name, column_type in user_migrations.items():
@@ -65,16 +67,30 @@ async def lifespan(_: FastAPI):
             "medical_screening_status": "VARCHAR(30)",
             "medical_background_concern": "BOOLEAN",
             "medical_feedback_shared": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "confirmation_pin": "VARCHAR(4)",
+            "confirmation_pin_attempts": "INTEGER NOT NULL DEFAULT 0",
         }
         for column_name, column_type in invitation_migrations.items():
             if column_name not in invitation_columns:
                 connection.execute(text(f"ALTER TABLE donation_invitations ADD COLUMN {column_name} {column_type}"))
+    with SessionLocal() as db:
+        active_invitations = db.scalars(
+            select(DonationInvitation).where(
+                DonationInvitation.status.in_(("pending", "available")),
+                DonationInvitation.confirmation_pin.is_(None),
+            )
+        ).all()
+        for invitation in active_invitations:
+            invitation.confirmation_pin = generate_confirmation_pin(db, invitation.blood_need_id)
+            db.flush()
+        if active_invitations:
+            db.commit()
     remove_legacy_demo_donors()
     yield
 
 
 app = FastAPI(
-    title="OpenVein API",
+    title="Blood365 API",
     description="Account registration and authentication for a blood donation community.",
     version="1.0.0",
     lifespan=lifespan,

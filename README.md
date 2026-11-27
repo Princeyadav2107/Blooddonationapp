@@ -1,6 +1,6 @@
-# OpenVein
+# Blood365
 
-OpenVein connects people requesting blood with nearby compatible volunteer donors. It is a hackathon prototype, not a blood bank or medical service.
+Blood365 connects people requesting blood with nearby compatible volunteer donors. It is a hackathon prototype, not a blood bank or medical service.
 
 ## What it does
 

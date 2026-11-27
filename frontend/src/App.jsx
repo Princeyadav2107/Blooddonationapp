@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -206,11 +206,11 @@ function App() {
       <div className="pointer-events-none absolute -right-52 top-0 h-[34rem] w-[34rem] rounded-full bg-amber-100/60 blur-3xl" />
 
       <header className="relative mx-auto flex max-w-7xl items-center justify-between px-6 py-6 lg:px-12">
-        <a href="#" className="flex items-center gap-2.5" aria-label="OpenVein home">
+        <a href="#" className="flex items-center gap-2.5" aria-label="Blood365 home">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-coral text-white shadow-lg shadow-coral/20">
             <Heart size={20} fill="currentColor" strokeWidth={2.2} />
           </span>
-          <span className="font-display text-xl font-extrabold tracking-tight">openvein</span>
+          <span className="font-display text-xl font-extrabold tracking-tight">blood365</span>
         </a>
         {account ? (
           <div className="flex items-center gap-4 text-sm">
@@ -228,7 +228,7 @@ function App() {
             <span className="hidden sm:inline">
               {isRegister || isForgotPassword || isResetPassword
                 ? "Already part of the community?"
-                : "New to OpenVein?"}
+                : "New to Blood365?"}
             </span>
             <button
               className="font-semibold text-coral transition hover:text-rose-700"
@@ -550,8 +550,8 @@ function App() {
 
       <footer className="relative border-t border-stone-200/70 bg-white/40">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-5 text-center text-xs leading-5 text-stone-500 sm:flex-row sm:items-center sm:justify-between sm:text-left lg:px-12">
-          <span>© {new Date().getFullYear()} OpenVein. Every connection starts with care.</span>
-          <span>OpenVein is a community platform, not a medical service.</span>
+          <span>© {new Date().getFullYear()} Blood365. Every connection starts with care.</span>
+          <span>Blood365 is a community platform, not a medical service.</span>
         </div>
       </footer>
     </main>
@@ -607,7 +607,7 @@ function Welcome({ account, onUserUpdate }) {
       {view === "home" ? (
         <>
           <div className="rounded-[2rem] border border-white bg-white p-7 shadow-card sm:p-10">
-            <p className="text-xs font-bold tracking-[0.16em] text-coral">OPENVEIN COMMUNITY</p>
+            <p className="text-xs font-bold tracking-[0.16em] text-coral">BLOOD365 COMMUNITY</p>
             <h1 className="mt-2 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">Welcome, {user.full_name.split(" ")[0]}.</h1>
             <p className="mt-3 max-w-2xl leading-7 text-stone-600">Choose what you need today. We’ll connect blood requests with nearby compatible donors and keep you updated as donors respond.</p>
             <div className="mt-6 flex flex-wrap gap-3 text-sm text-stone-600">
@@ -980,6 +980,16 @@ function BloodNeedDashboard({ account, onChangeLocation }) {
     } finally { setFallbackBusy(false); }
   }
 
+  async function regeneratePin(need, invitation) {
+    setFallbackBusy(true); setError(""); setNotice("");
+    try {
+      await authenticatedRequest(account, `/blood-needs/${need.reference_code}/invitations/${invitation.id}/confirmation-pin`, { method: "POST" });
+      setNotice(`A new donation confirmation code was generated for ${invitation.donor_name}.`);
+      await refreshNeeds();
+    } catch (err) { setError(err instanceof TypeError ? "We couldn't reach the server. Please try again." : err.message); }
+    finally { setFallbackBusy(false); }
+  }
+
   async function closeNeed(need) {
     setError(""); setNotice(""); setFallbackBusy(true);
     const previousNeeds = needs;
@@ -1007,7 +1017,7 @@ function BloodNeedDashboard({ account, onChangeLocation }) {
       <div className="max-w-2xl">
         <p className="text-xs font-bold tracking-[0.16em] text-coral">REQUEST BLOOD</p>
         <h2 className="mt-2 font-display text-2xl font-extrabold sm:text-3xl">Tell us what’s needed</h2>
-        <p className="mt-2 leading-6 text-stone-500">OpenVein checks compatible donors within 5 km, then expands to 10 km and 15 km. One donor is notified at a time; if they decline or don’t respond within five minutes, the next closest donor is contacted.</p>
+        <p className="mt-2 leading-6 text-stone-500">Blood365 checks compatible donors within 5 km, then expands to 10 km and 15 km. One donor is notified at a time; if they decline or don’t respond within five minutes, the next closest donor is contacted.</p>
       </div>
       <form onSubmit={submitNeed} className="mt-7 grid gap-4 sm:grid-cols-2">
         <Field label="Blood group needed" htmlFor="need_blood_group"><select id="need_blood_group" value={bloodGroup} onChange={(e) => setDraft((current) => ({ ...current, bloodGroup: e.target.value }))} required className="input"><option value="">Choose blood group</option>{bloodGroups.map((group) => <option key={group}>{group}</option>)}</select></Field>
@@ -1024,7 +1034,7 @@ function BloodNeedDashboard({ account, onChangeLocation }) {
         {notice && <p role="status" className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
         {activeNeeds.length === 0 ? <p className="mt-3 text-sm text-stone-500">No active blood requests. Closed requests remain in your history below.</p> : <div className="mt-4 space-y-3">{activeNeeds.map((need) => <article key={need.reference_code} className="rounded-2xl bg-cream p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-wide text-coral">{need.reference_code}</p><p className="mt-1 font-bold">{need.blood_group} · {need.city || "Nearby location"}{need.hospital ? ` · ${need.hospital}` : ""}</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold capitalize text-stone-600">{need.status}</span></div>
-          <div className="mt-3 space-y-2">{need.invitations.map((invitation, index) => <div key={`${need.reference_code}-${index}`} className="rounded-xl bg-white p-3 text-sm text-stone-600"><p className="flex flex-wrap items-center justify-between gap-2"><span>{invitation.donor_name} · {invitation.distance_km} km ({invitation.radius_km} km range){invitation.matching_mode === "universal" ? " · O− fallback" : invitation.matching_mode === "next_city" ? " · next city" : ""}</span><span className="font-semibold capitalize">{invitation.status}{invitation.status === "available" ? ` · ${[invitation.donor_phone, invitation.donor_email].filter(Boolean).join(" · ")}` : ""}</span></p>{invitation.medical_feedback_shared && <p className="mt-2 border-t pt-2 text-xs">Donor self-report: blood-bank screening <strong>{(invitation.medical_screening_status || "not provided").replaceAll("_", " ")}</strong>; reports a medical background concern: <strong>{invitation.medical_background_concern ? "yes" : "no"}</strong>. A blood bank must make the final eligibility decision.</p>}</div>)}</div>
+          <div className="mt-3 space-y-2">{need.invitations.map((invitation, index) => <div key={`${need.reference_code}-${index}`} className="rounded-xl bg-white p-3 text-sm text-stone-600"><p className="flex flex-wrap items-center justify-between gap-2"><span>{invitation.donor_name} · {invitation.distance_km} km ({invitation.radius_km} km range){invitation.matching_mode === "universal" ? " · O− fallback" : invitation.matching_mode === "next_city" ? " · next city" : ""}</span><span className="font-semibold capitalize">{invitation.status.replaceAll("_", " ")}{invitation.status === "available" ? ` · ${[invitation.donor_phone, invitation.donor_email].filter(Boolean).join(" · ")}` : ""}</span></p>{invitation.confirmation_pin && <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3"><p className="text-xs leading-5 text-emerald-900">Donation confirmation code (not a login OTP): <strong className="font-mono text-lg tracking-[0.2em]">{invitation.confirmation_pin}</strong><br />Share this code with the assigned donor after donation is complete.</p><button type="button" disabled={fallbackBusy} onClick={() => regeneratePin(need, invitation)} className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-50">Generate new code</button></div>}{invitation.medical_feedback_shared && <p className="mt-2 border-t pt-2 text-xs">Donor self-report: blood-bank screening <strong>{(invitation.medical_screening_status || "not provided").replaceAll("_", " ")}</strong>; reports a medical background concern: <strong>{invitation.medical_background_concern ? "yes" : "no"}</strong>. A blood bank must make the final eligibility decision.</p>}</div>)}</div>
           {["open", "unmatched", "matched"].includes(need.status) && <button type="button" disabled={fallbackBusy} onClick={() => closeNeed(need)} className="mt-4 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-600 disabled:opacity-50">{fallbackBusy ? "Closing request..." : "Close this request"}</button>}
           {need.status === "unmatched" && (need.universal_option_available || need.next_city_option_available) && <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="text-sm font-semibold text-amber-900">No local compatible donor was found. Choose another search:</p><div className="mt-3 flex flex-wrap gap-2">{need.universal_option_available && <button disabled={fallbackBusy} onClick={() => chooseFallback(need, "universal")} className="rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Search O− donors within 50 km</button>}{need.next_city_option_available && <button disabled={fallbackBusy} onClick={() => chooseFallback(need, "next_city")} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">Search compatible donors in nearby cities</button>}</div><p className="mt-2 text-xs text-amber-800">O− can donate red cells to all ABO/Rh groups, but a blood bank must confirm compatibility and cross-match before transfusion.</p></div>}
         </article>)}</div>}
@@ -1050,13 +1060,22 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [medicalForms, setMedicalForms] = useState({});
+  const [completionPins, setCompletionPins] = useState({});
+  const [donorScreen, setDonorScreen] = useState("inbox");
+  const initialInboxLoaded = useRef(false);
 
   async function refreshInbox() {
     const [inboxResult, createdResult] = await Promise.allSettled([
       authenticatedRequest(account, "/donor-invitations"),
       authenticatedRequest(account, "/blood-needs"),
     ]);
-    if (inboxResult.status === "fulfilled") setInvitations(inboxResult.value);
+    if (inboxResult.status === "fulfilled") {
+      setInvitations(inboxResult.value);
+      if (!initialInboxLoaded.current) {
+        initialInboxLoaded.current = true;
+        if (inboxResult.value.some((item) => item.status === "available")) setDonorScreen("accepted");
+      }
+    }
     if (createdResult.status === "fulfilled") {
       setCreatedRequests(createdResult.value);
       setCreatedRequestsError("");
@@ -1125,6 +1144,7 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
       const recipientContact = [result.recipient_phone, result.recipient_email].filter(Boolean).join(" · ");
       setNotice(recipientContact ? `${result.message} Recipient contact: ${recipientContact}` : result.message);
       if (response === "available") {
+        setDonorScreen("accepted");
         setInvitations((current) => current.map((item) => item.id === invitation.id
           ? { ...item, status: "available", recipient_phone: result.recipient_phone }
           : item));
@@ -1142,10 +1162,15 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
     setNotice("");
     setBusy(true);
     try {
-      const updatedUser = await authenticatedRequest(account, `/donor-invitations/${invitation.id}/complete`, { method: "POST" });
+      const updatedUser = await authenticatedRequest(account, `/donor-invitations/${invitation.id}/complete`, {
+        method: "POST",
+        body: JSON.stringify({ confirmation_pin: completionPins[invitation.id] ?? "" }),
+      });
       onUserUpdate(updatedUser);
       setProfile((current) => ({ ...current, last_donation_date: updatedUser.last_donation_date ?? "" }));
-      setNotice("Donation marked complete. Your last donation date was updated.");
+      setCompletionPins((current) => ({ ...current, [invitation.id]: "" }));
+      setNotice("You donated blood successfully! The donation has been confirmed and your countdown has started.");
+      setDonorScreen("inbox");
       await refreshInbox();
     } catch (err) {
       setError(err instanceof TypeError ? "We couldn't reach the server. Please try again." : err.message);
@@ -1169,8 +1194,25 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
   }
 
   const hasActiveAcceptance = invitations.some((invitation) => ["available", "accepted"].includes(invitation.status));
+  const acceptedInvitation = invitations.find((invitation) => invitation.status === "available");
   const liveInvitations = invitations.filter((invitation) => ["pending", "available", "accepted"].includes(invitation.status));
   const pastInvitations = invitations.filter((invitation) => !["pending", "available", "accepted"].includes(invitation.status));
+
+  if (donorScreen === "accepted" && acceptedInvitation) {
+    return <AcceptedDonationStep
+      invitation={acceptedInvitation}
+      busy={busy}
+      error={error}
+      notice={notice}
+      medicalForm={medicalForms[acceptedInvitation.id] || {}}
+      completionPin={completionPins[acceptedInvitation.id] || ""}
+      onBack={() => setDonorScreen("inbox")}
+      onMedicalChange={(field, value) => setMedicalForms((current) => ({ ...current, [acceptedInvitation.id]: { ...current[acceptedInvitation.id], [field]: value } }))}
+      onSaveMedicalFeedback={() => saveMedicalFeedback(acceptedInvitation)}
+      onPinChange={(value) => setCompletionPins((current) => ({ ...current, [acceptedInvitation.id]: value }))}
+      onComplete={() => completeDonation(acceptedInvitation)}
+    />;
+  }
 
   return (
     <div className="space-y-6">
@@ -1189,7 +1231,7 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
         </form>
       </div>
 
-      {(user.last_donation_date || profile.last_donation_date) && <DonationCooldownCard lastDonationDate={user.last_donation_date || profile.last_donation_date} gender={profile.gender || user.gender} />}
+      {user.last_verified_donation_at && <DonationCooldownCard lastDonationAt={user.last_verified_donation_at} />}
 
       <div className="rounded-[2rem] border border-white bg-white p-6 shadow-card sm:p-9">
         <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold tracking-[0.16em] text-coral">YOUR ACTIVITY</p><h2 className="mt-2 font-display text-2xl font-extrabold">Blood requests you created</h2><p className="mt-1 text-xs text-stone-500">Signed in as {user.email}; only requests from this account appear here.</p></div><button type="button" onClick={() => refreshInbox().catch((err) => setError(err.message))} className="text-xs font-semibold text-coral hover:text-rose-700">Refresh requests</button></div>
@@ -1208,7 +1250,7 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
           {invitation.message && <p className="mt-3 text-sm leading-6 text-stone-600">{invitation.message}</p>}
           {["available", "completed"].includes(invitation.status) && <p className="mt-3 rounded-xl bg-white p-3 text-sm text-stone-700">Acceptor contact: {invitation.recipient_phone ? <a className="font-semibold text-coral underline" href={`tel:${invitation.recipient_phone}`}>{invitation.recipient_phone}</a> : "No phone number was provided."}</p>}
           {invitation.status === "pending" && invitation.eligibility_confirmation_required && <label className="mt-4 flex items-start gap-2 rounded-xl bg-white p-3 text-xs leading-5 text-stone-600"><input type="checkbox" checked={confirmations[invitation.id] ?? false} onChange={(event) => setConfirmations((current) => ({ ...current, [invitation.id]: event.target.checked }))} className="mt-1 accent-rose-600" /><span>We don’t have a complete donation date record for you. I confirm I meet the applicable whole-blood interval (90 days for males, 120 days for females) and will follow the blood bank’s screening advice.</span></label>}
-          {invitation.status === "pending" ? <><p className="mt-3 text-xs leading-5 text-stone-500">Your phone number is shared with the acceptor if you mark yourself available. The blood bank makes the final eligibility decision.</p>{hasActiveAcceptance && <p className="mt-3 text-xs font-semibold text-amber-800">You already accepted another request. Complete it before accepting another.</p>}<div className="mt-4 flex flex-wrap gap-2"><button disabled={busy || hasActiveAcceptance || (invitation.eligibility_confirmation_required && !(confirmations[invitation.id] ?? false))} onClick={() => respond(invitation, "available")} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">I’m available</button><button disabled={busy} onClick={() => respond(invitation, "not_available")} className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 disabled:opacity-50">Not available</button><button disabled={busy} onClick={() => respond(invitation, "not_eligible")} className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-50">Not eligible</button></div></> : invitation.status === "available" ? <><p className="mt-3 text-xs font-semibold text-emerald-800">You accepted this request and marked yourself available. This stays in your inbox as your active donation.</p><div className="mt-4 rounded-xl bg-white p-4"><h4 className="text-sm font-bold">Medical screening and background feedback</h4><p className="mt-1 text-xs leading-5 text-stone-500">Self-report only; don’t enter diagnoses or test results. The blood bank decides donor eligibility. If you consent, the acceptor sees this summary.</p><label className="mt-3 block text-xs font-semibold">Blood-bank screening status<select value={medicalForms[invitation.id]?.screening_status ?? invitation.medical_screening_status ?? "not_scheduled"} onChange={(e) => setMedicalForms((current) => ({ ...current, [invitation.id]: { ...current[invitation.id], screening_status: e.target.value } }))} className="input mt-1"><option value="not_scheduled">Not scheduled</option><option value="scheduled">Scheduled</option><option value="awaiting_results">Awaiting blood-bank decision</option><option value="cleared_by_blood_bank">Blood bank told me I’m cleared</option><option value="not_cleared">Blood bank told me I’m not cleared</option></select></label><label className="mt-3 flex items-start gap-2 text-xs leading-5 text-stone-600"><input type="checkbox" checked={medicalForms[invitation.id]?.background_concern ?? invitation.medical_background_concern ?? false} onChange={(e) => setMedicalForms((current) => ({ ...current, [invitation.id]: { ...current[invitation.id], background_concern: e.target.checked } }))} className="mt-1 accent-rose-600" /><span>I have a medical or medication concern I plan to discuss with the blood bank before donating.</span></label><label className="mt-3 flex items-start gap-2 text-xs leading-5 text-stone-600"><input type="checkbox" checked={medicalForms[invitation.id]?.share_with_acceptor ?? invitation.medical_feedback_shared ?? false} onChange={(e) => setMedicalForms((current) => ({ ...current, [invitation.id]: { ...current[invitation.id], share_with_acceptor: e.target.checked } }))} className="mt-1 accent-rose-600" /><span>I consent to share this screening status and concern summary with the acceptor.</span></label><button type="button" disabled={busy} onClick={() => saveMedicalFeedback(invitation)} className="mt-3 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Save medical feedback</button></div><button type="button" disabled={busy} onClick={() => completeDonation(invitation)} className="mt-4 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Updating..." : "Mark donation complete"}</button></> : invitation.status === "completed" ? <><p className="mt-3 text-xs font-semibold text-stone-600">Donation marked complete. This request is kept in your activity history.</p>{invitation.medical_feedback_shared && <p className="mt-2 text-xs text-stone-600">Your shared feedback: {(invitation.medical_screening_status || "not provided").replaceAll("_", " ")}; medical concern {invitation.medical_background_concern ? "reported" : "not reported"}.</p>}</> : <p className="mt-3 text-xs text-stone-600">Your response: <span className="font-semibold capitalize">{invitation.status.replaceAll("_", " ")}</span>. This request remains in your activity history.</p>}
+          {invitation.status === "pending" ? <><p className="mt-3 text-xs leading-5 text-stone-500">Your phone number is shared with the acceptor if you mark yourself available. The blood bank makes the final eligibility decision.</p>{hasActiveAcceptance && <p className="mt-3 text-xs font-semibold text-amber-800">You already accepted another request. Complete it before accepting another.</p>}<div className="mt-4 flex flex-wrap gap-2"><button disabled={busy || hasActiveAcceptance || (invitation.eligibility_confirmation_required && !(confirmations[invitation.id] ?? false))} onClick={() => respond(invitation, "available")} className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">I’m available</button><button disabled={busy} onClick={() => respond(invitation, "not_available")} className="rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-sm font-semibold text-stone-700 disabled:opacity-50">Not available</button><button disabled={busy} onClick={() => respond(invitation, "not_eligible")} className="rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-semibold text-rose-700 disabled:opacity-50">Not eligible</button></div></> : invitation.status === "available" ? <div className="mt-3 rounded-xl bg-white p-4"><p className="text-sm font-semibold text-emerald-800">Your availability is confirmed. Continue in the accepted-donation screen.</p><button type="button" onClick={() => setDonorScreen("accepted")} className="mt-3 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white">Open accepted donation</button></div> : invitation.status === "completed" ? <><p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-800">You donated blood successfully! This request is kept in your history.</p>{invitation.medical_feedback_shared && <p className="mt-2 text-xs text-stone-600">Your shared feedback: {(invitation.medical_screening_status || "not provided").replaceAll("_", " ")}; medical concern {invitation.medical_background_concern ? "reported" : "not reported"}.</p>}</> : <p className="mt-3 text-xs text-stone-600">Your response: <span className="font-semibold capitalize">{invitation.status.replaceAll("_", " ")}</span>. This request remains in your activity history.</p>}
         </article>)}</div>}
         {pastInvitations.length > 0 && <div className="mt-6 border-t border-stone-100 pt-5"><h3 className="font-display text-xl font-extrabold">Request history</h3><div className="mt-4 space-y-3">{pastInvitations.map((invitation) => <article key={invitation.id} className="rounded-2xl bg-cream p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold tracking-wide text-coral">{invitation.reference_code}</p><p className="mt-1 font-semibold">{invitation.blood_group} · {invitation.city || "Nearby"} · {invitation.recipient_name}</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-bold capitalize">{invitation.status.replaceAll("_", " ")}</span></div><p className="mt-2 text-xs text-stone-500">{invitation.status === "completed" ? "Donation completed." : invitation.status === "closed" ? "Request closed by the acceptor." : `Your response: ${invitation.status.replaceAll("_", " ")}.`}</p></article>)}</div></div>}
       </div>
@@ -1216,17 +1258,45 @@ function DonorDashboard({ account, onUserUpdate, onChangeLocation }) {
   );
 }
 
-function DonationCooldownCard({ lastDonationDate, gender }) {
+function AcceptedDonationStep({ invitation, busy, error, notice, medicalForm, completionPin, onBack, onMedicalChange, onSaveMedicalFeedback, onPinChange, onComplete }) {
+  return (
+    <div className="mx-auto max-w-3xl space-y-5">
+      <button type="button" onClick={onBack} className="rounded-xl border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-700">← Back to live inbox</button>
+      <section className="rounded-[2rem] border border-emerald-100 bg-white p-6 shadow-card sm:p-9">
+        <p className="text-xs font-bold tracking-[0.16em] text-emerald-700">NEXT STEP · DONATION ACCEPTED</p>
+        <h2 className="mt-2 font-display text-2xl font-extrabold">You marked yourself available</h2>
+        <p className="mt-2 text-sm leading-6 text-stone-600">Request {invitation.reference_code} · {invitation.blood_group} · {invitation.recipient_name}{invitation.hospital ? ` · ${invitation.hospital}` : ""}</p>
+        {invitation.recipient_phone && <p className="mt-3 rounded-xl bg-cream p-3 text-sm">Acceptor contact: <a className="font-semibold text-coral underline" href={`tel:${invitation.recipient_phone}`}>{invitation.recipient_phone}</a></p>}
+        <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm leading-6 text-emerald-900">After you donate, enter the four-digit confirmation code provided by the acceptor below. The code confirms this donation; it is not a login OTP.</p>
+        {error && <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
+        {notice && <p role="status" className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</p>}
+        <div className="mt-6 rounded-xl border border-stone-100 bg-cream/60 p-4">
+          <h3 className="font-bold">Medical screening and background feedback</h3>
+          <p className="mt-1 text-xs leading-5 text-stone-500">Self-report only; don’t enter diagnoses or test results. The blood bank decides donor eligibility. The acceptor sees this summary only if you consent.</p>
+          <label className="mt-3 block text-sm font-semibold">Blood-bank screening status<select value={medicalForm.screening_status ?? invitation.medical_screening_status ?? "not_scheduled"} onChange={(event) => onMedicalChange("screening_status", event.target.value)} className="input mt-1"><option value="not_scheduled">Not scheduled</option><option value="scheduled">Scheduled</option><option value="awaiting_results">Awaiting blood-bank decision</option><option value="cleared_by_blood_bank">Blood bank told me I’m cleared</option><option value="not_cleared">Blood bank told me I’m not cleared</option></select></label>
+          <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-stone-600"><input type="checkbox" checked={medicalForm.background_concern ?? invitation.medical_background_concern ?? false} onChange={(event) => onMedicalChange("background_concern", event.target.checked)} className="mt-1 accent-rose-600" /><span>I have a medical or medication concern I plan to discuss with the blood bank before donating.</span></label>
+          <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-stone-600"><input type="checkbox" checked={medicalForm.share_with_acceptor ?? invitation.medical_feedback_shared ?? false} onChange={(event) => onMedicalChange("share_with_acceptor", event.target.checked)} className="mt-1 accent-rose-600" /><span>I consent to share this screening status and concern summary with the acceptor.</span></label>
+          <button type="button" disabled={busy} onClick={onSaveMedicalFeedback} className="mt-3 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-white disabled:opacity-50">Save medical feedback</button>
+        </div>
+        <div className="mt-5 rounded-xl border border-emerald-100 bg-white p-4">
+          <label className="block text-sm font-semibold">4-digit donation confirmation code<input type="text" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} value={completionPin} onChange={(event) => onPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))} className="input mt-2 max-w-xs font-mono text-lg tracking-[0.2em]" placeholder="Enter code from acceptor" /></label>
+          <button type="button" disabled={busy || !/^\d{4}$/.test(completionPin)} onClick={onComplete} className="mt-4 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{busy ? "Checking code..." : "Confirm donation complete"}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function DonationCooldownCard({ lastDonationAt }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  const requiredDays = gender === "female" ? 120 : 90;
-  const donatedAt = new Date(`${lastDonationDate}T00:00:00`);
-  const nextDate = new Date(donatedAt);
-  nextDate.setDate(nextDate.getDate() + requiredDays);
+  const requiredDays = 90;
+  const donatedAt = new Date(lastDonationAt);
+  const nextDate = new Date(donatedAt.getTime() + requiredDays * 86400000);
   const remainingMs = Math.max(0, nextDate.getTime() - now);
   const days = Math.floor(remainingMs / 86400000);
   const hours = Math.floor((remainingMs % 86400000) / 3600000);
@@ -1236,7 +1306,7 @@ function DonationCooldownCard({ lastDonationDate, gender }) {
   const progress = Math.round((elapsed / requiredDays) * 100);
   const formattedDate = Number.isNaN(nextDate.getTime())
     ? ""
-    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(nextDate);
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(nextDate);
 
   if (Number.isNaN(donatedAt.getTime())) return null;
 
@@ -1245,13 +1315,13 @@ function DonationCooldownCard({ lastDonationDate, gender }) {
       <p className="text-xs font-bold tracking-[0.16em] text-emerald-800">DONATION COUNTDOWN</p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="font-display text-xl font-extrabold">{remainingMs > 0 ? "Time until your next matching interval" : "Donation interval complete"}</h2>
-          <p className="mt-1 text-sm text-stone-600">Based on your recorded donation date: {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(donatedAt)}. Next interval date: {formattedDate}.</p>
+          <h2 className="font-display text-xl font-extrabold">{remainingMs > 0 ? "90-day post-donation countdown" : "90-day countdown complete"}</h2>
+          <p className="mt-1 text-sm text-stone-600">Countdown started at {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(donatedAt)}. Timer ends: {formattedDate}.</p>
         </div>
         {remainingMs > 0 ? <div className="flex gap-2 text-center">{[[days, "days"], [hours, "hrs"], [minutes, "min"], [seconds, "sec"]].map(([value, label]) => <div key={label} className="min-w-14 rounded-xl bg-white px-2 py-2"><p className="text-xl font-extrabold tabular-nums text-emerald-800">{String(value).padStart(2, "0")}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">{label}</p></div>)}</div> : <span className="rounded-full bg-white px-4 py-2 text-sm font-bold text-emerald-800">Ready for matching review</span>}
       </div>
       <div className="mt-4 h-2 overflow-hidden rounded-full bg-white"><div className="h-full rounded-full bg-emerald-600 transition-[width]" style={{ width: `${progress}%` }} /></div>
-      <p className="mt-2 text-xs leading-5 text-stone-500">The countdown follows the app’s matching interval (90 days for male donors, 120 days for female donors). It is not medical clearance; the blood bank makes the final eligibility decision.</p>
+      <p className="mt-2 text-xs leading-5 text-stone-500">This 90-day timer begins only after the acceptor’s code confirms completion. Existing matching checks and the blood bank’s eligibility decision still apply.</p>
     </section>
   );
 }

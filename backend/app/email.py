@@ -15,11 +15,11 @@ def send_password_reset_email(recipient: str, reset_url: str) -> None:
         raise RuntimeError("Password reset email delivery is not configured")
 
     message = EmailMessage()
-    message["Subject"] = "Reset your OpenVein password"
+    message["Subject"] = "Reset your Blood365 password"
     message["From"] = settings.smtp_from_email
     message["To"] = recipient
     message.set_content(
-        "We received a request to reset your OpenVein password.\n\n"
+        "We received a request to reset your Blood365 password.\n\n"
         f"Use this one-time link within {settings.password_reset_expire_minutes} minutes:\n"
         f"{reset_url}\n\n"
         "If you did not request this, you can ignore this email."
@@ -61,7 +61,7 @@ def send_blood_request_email(
         f"Blood group needed: {blood_group}\n"
         f"Location: {location}\n"
         f"Approximate distance: {distance_km:.1f} km\n\n"
-        "Sign in to OpenVein to confirm whether you are available and eligible. "
+        "Sign in to Blood365 to confirm whether you are available and eligible. "
         "A blood bank must make the final medical eligibility decision.\n\n"
         f"{frontend_url.rstrip('/')}"
     )
